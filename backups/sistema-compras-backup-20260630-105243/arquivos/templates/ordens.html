@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Ordens de compra | ComprasPro{% endblock %}
+{% block page_title %}Ordens de compra{% endblock %}
+{% block page_subtitle %}Acompanhe todo o ciclo das aquisicoes{% endblock %}
+{% block content %}
+<div class="panel-card">
+  <div class="panel-header">
+    <div>
+      <h2>Ordens cadastradas</h2>
+      <p>{{ ordens|length }} registro(s)</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('nova_ordem') }}"><i class="bi bi-plus-lg"></i> Nova ordem</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead>
+        <tr>
+          <th>Ordem</th>
+          <th>Fornecedor / Produto</th>
+          <th>Qtd. compra</th>
+          <th>Qtd. base</th>
+          <th>Entrega</th>
+          <th>Valor total</th>
+          <th>Custo base</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in ordens %}
+        {% set fator = o.quantidade_por_unidade_compra or 1 %}
+        {% set qtd_base = o.quantidade * fator %}
+        <tr>
+          <td><strong>{{ o.numero_oc }}</strong><small>{{ o.data_preenchimento.strftime('%d/%m/%Y') }}</small></td>
+          <td><strong>{{ o.fornecedor }}</strong><small>{{ o.produto }}</small></td>
+          <td>{{ o.quantidade }} {{ o.unidade }}</td>
+          <td>{{ qtd_base }} {{ o.unidade_base or o.unidade }}</td>
+          <td>{{ o.data_entrega.strftime('%d/%m/%Y') }}</td>
+          <td><strong>{{ o.valor_total|moeda }}</strong></td>
+          <td>{{ (o.valor_total / qtd_base)|moeda if qtd_base else '-' }}</td>
+          <td><span class="status-badge status-{{ o.status_compra|replace(' ','-') }}">{{ o.status_compra }}</span></td>
+          <td class="text-end">
+            <a class="btn btn-icon" href="{{ url_for('nova_ordem', item_id=o.id) }}"><i class="bi bi-pencil"></i></a>
+            <form class="d-inline" method="post" action="{{ url_for('excluir_ordem', item_id=o.id) }}" onsubmit="return confirmDelete()">
+              <button class="btn btn-icon text-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty-state">Nenhuma ordem cadastrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
