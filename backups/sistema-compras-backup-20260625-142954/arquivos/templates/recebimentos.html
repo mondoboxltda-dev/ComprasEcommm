@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% block title %}Recebimentos | ComprasPro{% endblock %}
+{% block page_title %}Recebimentos{% endblock %}
+{% block page_subtitle %}Controle de entregas e importação automática de NF-e{% endblock %}
+{% block content %}
+<div class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2>NF-e de fornecedores</h2>
+      <p>Importe o XML para montar o recebimento e cadastrar fornecedor/produtos quando necessário</p>
+    </div>
+    <form method="post" action="{{ url_for('importar_xml_nfe') }}" enctype="multipart/form-data" class="import-inline">
+      <input class="form-control" type="file" name="xml" accept=".xml" required>
+      <button class="btn btn-primary"><i class="bi bi-filetype-xml"></i> Importar XML</button>
+    </form>
+  </div>
+
+  {% if selected_nfe %}
+  <div class="nfe-summary">
+    <div><span>Ordem de compra</span><strong>{{ selected_nfe.numero_oc or '-' }}</strong></div>
+    <div><span>Fornecedor</span><strong>{{ selected_nfe.fornecedor }}</strong></div>
+    <div><span>CNPJ do fornecedor</span><strong>{{ selected_nfe.fornecedor_cnpj }}</strong></div>
+    <div><span>Número da NF</span><strong>{{ selected_nfe.numero_nf }}</strong></div>
+    <div><span>Série</span><strong>{{ selected_nfe.serie or '-' }}</strong></div>
+    <div><span>Chave da NF-e</span><strong>{{ selected_nfe.chave_nfe }}</strong></div>
+    <div><span>Data de emissão</span><strong>{{ selected_nfe.data_emissao.strftime('%d/%m/%Y') if selected_nfe.data_emissao else '-' }}</strong></div>
+    <div><span>Data de entrada</span><strong>{{ selected_nfe.data_entrada.strftime('%d/%m/%Y') }}</strong></div>
+    <div><span>Valor total da NF</span><strong>{{ selected_nfe.valor_total|moeda }}</strong></div>
+  </div>
+  {% if not selected_nfe.ordem_id %}
+  <form method="post" action="{{ url_for('vincular_ordem_nfe', nfe_id=selected_nfe.id) }}" class="link-order-form mt-3">
+    <select class="form-select" name="ordem_id" required>
+      <option value="">Selecionar Ordem de Compra para esta NF-e</option>
+      {% for ordem in ordens_disponiveis %}
+      <option value="{{ ordem.id }}">{{ ordem.numero_oc }} - {{ ordem.fornecedor }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-primary">Vincular OC</button>
+  </form>
+  {% endif %}
+
+  <div class="table-responsive mt-4">
+    <table class="table modern-table nfe-items-table">
+      <thead>
+        <tr>
+          <th>Código interno</th>
+          <th>Cód. fornecedor</th>
+          <th>Fornecedor</th>
+          <th>Número NF</th>
+          <th>Data entrada</th>
+          <th>Descrição</th>
+          <th>Unidade</th>
+          <th>Valor unitário</th>
+          <th>Quantidade</th>
+          <th>Valor total</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in nfe_items %}
+        <tr class="{{ 'pending-row' if item.status == 'pendente' }}">
+          <td>
+            {% if item.status == 'vinculado' %}
+            <strong>{{ item.codigo_interno }}</strong>
+            {% else %}
+            <strong>Não registrado</strong>
+            <form method="post" action="{{ url_for('vincular_item_nfe', item_id=item.id) }}" class="link-product-form">
+              <select class="form-select" name="produto_id" required>
+                <option value="">Selecionar código interno</option>
+                {% for produto in produtos_ativos %}
+                <option value="{{ produto.id }}">{{ produto.codigo }} - {{ produto.descricao }}</option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-sm btn-primary">Vincular</button>
+            </form>
+            {% endif %}
+          </td>
+          <td>{{ item.codigo_fornecedor or '-' }}</td>
+          <td>{{ item.fornecedor }}</td>
+          <td>{{ item.numero_nf }}</td>
+          <td>{{ item.data_entrada.strftime('%d/%m/%Y') }}</td>
+          <td>
+            <strong>{{ item.descricao }}</strong>
+            <small>NCM {{ item.ncm or '-' }} · CFOP {{ item.cfop or '-' }} · CEST {{ item.cest or '-' }} · EAN {{ item.ean or '-' }}</small>
+          </td>
+          <td>{{ item.unidade or '-' }}</td>
+          <td>{{ item.valor_unitario|moeda }}</td>
+          <td>{{ item.quantidade }}</td>
+          <td>{{ item.valor_total|moeda }}</td>
+          <td>
+            {% if item.status == 'vinculado' %}
+            <span class="status-pill status-linked">Vinculado</span>
+            {% else %}
+            <span class="status-pill status-pending-link">Não registrado</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="empty-state">Nenhum produto encontrado nesta NF-e.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">Nenhum XML de NF-e importado ainda.</div>
+  {% endif %}
+</div>
+
+{% if nfe_rows %}
+<div class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2>Notas importadas</h2>
+      <p>{{ nfe_rows|length }} nota(s) encontrada(s)</p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead><tr><th>NF</th><th>Ordem</th><th>Fornecedor</th><th>Entrada</th><th>Valor</th><th></th></tr></thead>
+      <tbody>
+        {% for nfe in nfe_rows %}
+        <tr>
+          <td><strong>{{ nfe.numero_nf }}</strong><small>Série {{ nfe.serie or '-' }}</small></td>
+          <td>{{ nfe.numero_oc or '-' }}</td>
+          <td>{{ nfe.fornecedor }}</td>
+          <td>{{ nfe.data_entrada.strftime('%d/%m/%Y') }}</td>
+          <td>{{ nfe.valor_total|moeda }}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('recebimentos', nfe_id=nfe.id) }}">Ver</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel-card">
+  <div class="panel-header">
+    <div>
+      <h2>Agenda de recebimentos</h2>
+      <p>Atrasos são identificados automaticamente</p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead><tr><th>Ordem</th><th>Data prevista</th><th>Data real</th><th>Dias de atraso</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for r in recebimentos %}
+        <tr>
+          <td><strong>{{ r.numero_oc }}</strong></td>
+          <td>{{ r.data_prevista.strftime('%d/%m/%Y') }}</td>
+          <td>{{ r.data_real.strftime('%d/%m/%Y') if r.data_real else '-' }}</td>
+          <td><span class="{{ 'text-danger fw-bold' if r.dias_atraso }}">{{ r.dias_atraso }} dia(s)</span></td>
+          <td><span class="status-badge status-{{ r.status_exibicao|replace(' ','-') }}">{{ r.status_exibicao }}</span></td>
+          <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#receiveModal" onclick='fillForm("receiveForm", {{ r|tojson }})'>Atualizar</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="receiveModal">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="receiveForm">
+        <div class="modal-header">
+          <h5>Atualizar recebimento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="id">
+          <div class="mb-3">
+            <label class="form-label">Data real de chegada</label>
+            <input class="form-control" type="date" name="data_real">
+          </div>
+          <div>
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+              <option>aguardando</option>
+              <option>entregue parcial</option>
+              <option>entregue completo</option>
+              <option>atrasado</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary">Salvar recebimento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
