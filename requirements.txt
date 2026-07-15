@@ -1,1 +1,0 @@
-﻿-r sistema-compras/requirements.txt
