@@ -1,0 +1,389 @@
+{% extends 'base.html' %}
+{% block title %}Recebimentos | ComprasPro{% endblock %}
+{% block page_title %}Recebimentos{% endblock %}
+{% block page_subtitle %}Central de recebimentos por XML e entrada manual{% endblock %}
+{% block content %}
+<div class="panel-card mb-4">
+  <div class="panel-header">
+    <div>
+      <h2>Recebimentos registrados</h2>
+      <p>{{ nfe_rows|length }} entrada(s) encontrada(s)</p>
+    </div>
+    <div class="import-inline">
+      <form method="post" action="{{ url_for('importar_xml_nfe') }}" enctype="multipart/form-data" class="import-inline">
+        <input class="form-control" type="file" name="xmls" accept=".xml" multiple required>
+        <button class="btn btn-primary"><i class="bi bi-filetype-xml"></i> Importar XMLs em massa</button>
+      </form>
+      <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#manualReceiptModal"><i class="bi bi-keyboard"></i> Entrada Manual</button>
+    </div>
+  </div>
+  <form class="receipt-filters mb-3" method="get">
+    <select class="form-select" name="origem"><option value="">Origem</option><option value="XML" {{ 'selected' if filtros.origem == 'XML' }}>XML</option><option value="Manual" {{ 'selected' if filtros.origem == 'Manual' }}>Manual</option></select>
+    <input class="form-control" name="fornecedor" value="{{ filtros.fornecedor }}" placeholder="Fornecedor">
+    <input class="form-control" name="produto" value="{{ filtros.produto }}" placeholder="Produto">
+    <input class="form-control" name="documento" value="{{ filtros.documento }}" placeholder="Documento">
+    <input class="form-control" type="date" name="data_inicio" value="{{ filtros.data_inicio }}">
+    <input class="form-control" type="date" name="data_fim" value="{{ filtros.data_fim }}">
+    <select class="form-select" name="status">
+      <option value="">Status</option>
+      {% for status in ['Recebido','Recebido Parcialmente','Pendente','Produto Pendente de Cadastro','Aguardando Ordem de Compra'] %}
+      <option value="{{ status }}" {{ 'selected' if filtros.status == status }}>{{ status }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-light">Filtrar</button>
+  </form>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead>
+        <tr>
+          <th>NF</th>
+          <th>Série</th>
+          <th>Origem</th>
+          <th>Ordem vinculada</th>
+          <th>Fornecedor</th>
+          <th>Data de entrada</th>
+          <th>Valor</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for nfe in nfe_rows %}
+        <tr>
+          <td><strong>{{ nfe.numero_nf }}</strong></td>
+          <td>{{ nfe.serie or '-' }}</td>
+          <td><span class="status-badge status-{{ 'em-compra' if nfe.origem == 'Manual' else 'ativo' }}">{{ nfe.origem }}</span></td>
+          <td>{{ nfe.numero_oc or '-' }}</td>
+          <td>{{ nfe.fornecedor }}</td>
+          <td>{{ nfe.data_entrada.strftime('%d/%m/%Y') }}</td>
+          <td>{{ nfe.valor_total|moeda }}</td>
+          <td>
+            {% if nfe.status_recebimento %}
+            <span class="status-pill {{ 'status-pending-link' if nfe.status_recebimento == 'Produto Pendente de Cadastro' else 'status-awaiting' if nfe.status_recebimento in ['Aguardando Ordem de Compra','Pendente'] else 'status-linked' }}">{{ nfe.status_recebimento }}</span>
+            {% elif nfe.itens_pendentes %}
+            <span class="status-pill status-pending-link">{{ nfe.itens_pendentes }} produto(s) pendente(s)</span>
+            {% elif not nfe.ordem_id %}
+            <span class="status-pill status-awaiting">Aguardando OC</span>
+            {% else %}
+            <span class="status-pill status-linked">Vinculada</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#nfeModal{{ nfe.id }}">Ver</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty-state">Nenhum recebimento registrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% for nfe in nfe_rows %}
+<div class="modal fade" id="nfeModal{{ nfe.id }}" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title">NF-e {{ nfe.numero_nf }}</h5>
+          <small class="text-muted">Série {{ nfe.serie or '-' }} · {{ nfe.fornecedor }}</small>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="nfe-summary">
+          <div><span>Fornecedor</span><strong>{{ nfe.fornecedor }}</strong></div>
+          <div><span>CNPJ</span><strong>{{ nfe.fornecedor_cnpj }}</strong></div>
+          <div><span>Chave da NF-e</span><strong>{{ nfe.chave_nfe }}</strong></div>
+          <div><span>Data de emissão</span><strong>{{ nfe.data_emissao.strftime('%d/%m/%Y') if nfe.data_emissao else '-' }}</strong></div>
+          <div><span>Data de entrada</span><strong>{{ nfe.data_entrada.strftime('%d/%m/%Y') }}</strong></div>
+          <div><span>Valor total</span><strong>{{ nfe.valor_total|moeda }}</strong></div>
+          <div><span>Ordem vinculada</span><strong>{{ nfe.numero_oc or '-' }}</strong></div>
+        </div>
+
+        <form method="post" action="{{ url_for('vincular_ordem_nfe', nfe_id=nfe.id) }}" class="link-order-form mt-3">
+          <select class="form-select" name="ordem_id" required>
+            <option value="">Selecionar Ordem de Compra</option>
+            {% for ordem in ordens_disponiveis %}
+            <option value="{{ ordem.id }}" {{ 'selected' if nfe.ordem_id == ordem.id }}>{{ ordem.numero_oc }} - {{ ordem.fornecedor }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-primary">Salvar vínculo</button>
+        </form>
+
+        <div class="table-responsive mt-4">
+          <table class="table modern-table nfe-items-table">
+            <thead>
+              <tr>
+                <th>Cód. fornecedor</th>
+                <th>Código interno</th>
+                <th>Descrição</th>
+                <th>Unidade</th>
+                <th>Quantidade</th>
+                <th>Qtd. base</th>
+                <th>Valor unitário</th>
+                <th>Valor base</th>
+                <th>Valor total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in nfe_items_by_id.get(nfe.id, []) %}
+              <tr class="{{ 'pending-row' if item.status == 'pendente' }}">
+                <td>{{ item.codigo_fornecedor or '-' }}</td>
+                <td>
+                  {% if item.status == 'vinculado' %}
+                  <strong>{{ item.codigo_interno }}</strong>
+                  {% elif item.produto_id %}
+                  <strong>{{ item.codigo_interno or 'Nao registrado' }}</strong>
+                  <small>Produto cadastrado automaticamente</small>
+                  <form method="post" action="{{ url_for('vincular_item_nfe', item_id=item.id) }}" class="link-product-form">
+                    <select class="form-select" name="produto_id" required>
+                      <option value="">Trocar por codigo interno revisado</option>
+                      {% for produto in produtos_ativos %}
+                      <option value="{{ produto.id }}">{{ produto.codigo }} - {{ produto.descricao }}</option>
+                      {% endfor %}
+                    </select>
+                    <button class="btn btn-sm btn-primary">Vincular</button>
+                  </form>
+                  {% else %}
+                  <strong>Não registrado</strong>
+                  <form method="post" action="{{ url_for('vincular_item_nfe', item_id=item.id) }}" class="link-product-form">
+                    <select class="form-select" name="produto_id" required>
+                      <option value="">Selecionar código interno</option>
+                      {% for produto in produtos_ativos %}
+                      <option value="{{ produto.id }}">{{ produto.codigo }} - {{ produto.descricao }}</option>
+                      {% endfor %}
+                    </select>
+                    <button class="btn btn-sm btn-primary">Vincular</button>
+                  </form>
+                  {% endif %}
+                </td>
+                <td>
+                  <strong>{{ item.descricao }}</strong>
+                  <small>NCM {{ item.ncm or '-' }} · CFOP {{ item.cfop or '-' }} · CEST {{ item.cest or '-' }} · EAN {{ item.ean or '-' }}</small>
+                </td>
+                <td>{{ item.unidade or '-' }}</td>
+                <td>{{ item.quantidade }}</td>
+                <td>{{ item.quantidade_total_base }} {{ item.unidade_base }}</td>
+                <td>{{ item.valor_unitario|moeda }}</td>
+                <td>{{ item.valor_unitario_base|moeda }}</td>
+                <td>{{ item.valor_total|moeda }}</td>
+                <td>
+                  {% if item.status == 'vinculado' %}
+                  <span class="status-pill status-linked">Vinculado</span>
+                  {% elif item.produto_id %}
+                  <span class="status-pill status-pending-link">Pendente revisao</span>
+                  {% else %}
+                  <span class="status-pill status-pending-link">Não registrado</span>
+                  {% endif %}
+                  {% if item.alerta_conversao %}
+                  <small class="text-warning d-block">Produto sem quantidade por unidade de compra cadastrada.</small>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="10" class="empty-state">Nenhum produto encontrado nesta NF-e.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<div class="modal fade" id="manualReceiptModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('salvar_recebimento_manual') }}" id="manualReceiptForm">
+        <div class="modal-header">
+          <div><h5 class="modal-title">Entrada Manual</h5><small class="text-muted">Recebimento para fornecedor sem XML/NF-e</small></div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-4"><label class="form-label">Fornecedor *</label><select class="form-select" name="fornecedor_id" id="manualFornecedor" required><option value="">Selecione</option>{% for f in fornecedores %}<option value="{{ f.id }}">{{ f.nome }}</option>{% endfor %}</select></div>
+            <div class="col-md-2"><label class="form-label">Numero do Documento</label><input class="form-control" name="numero_nf"></div>
+            <div class="col-md-3"><label class="form-label">Tipo do Documento</label><select class="form-select" name="tipo_documento"><option>Nota Fiscal</option><option>Cupom Fiscal</option><option>Recibo</option><option>Pedido</option><option>Sem Documento</option></select></div>
+            <div class="col-md-3"><label class="form-label">Condicao de Pagamento</label><select class="form-select" name="condicao_pagamento"><option value="">Selecione</option>{% for tipo in tipos_pagamento %}<option>{{ tipo.nome }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label">Data da Compra</label><input class="form-control" type="date" name="data_compra" value="{{ hoje.isoformat() }}"></div>
+            <div class="col-md-3"><label class="form-label">Data de Entrada *</label><input class="form-control" type="date" name="data_entrada" value="{{ hoje.isoformat() }}" required></div>
+            <div class="col-md-6"><label class="form-label">Ordem de Compra</label><select class="form-select" name="ordem_id" id="manualOrdem"><option value="">Recebimento avulso</option>{% for ordem in ordens_disponiveis %}<option value="{{ ordem.id }}">{{ ordem.numero_oc }} - {{ ordem.fornecedor }}</option>{% endfor %}</select></div>
+            <div class="col-12"><label class="form-label">Observacoes</label><textarea class="form-control" name="observacoes" rows="2"></textarea></div>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+            <h6 class="m-0">Produtos recebidos</h6>
+            <button type="button" class="btn btn-sm btn-light" onclick="addManualItemRow()"><i class="bi bi-plus-lg"></i> Adicionar item</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table modern-table manual-items-table">
+              <thead><tr><th>Codigo Interno</th><th>Cod. Fornecedor</th><th>Descricao</th><th>Qtd.</th><th>Un.</th><th>Valor Unit.</th><th>Desconto</th><th>Total</th><th></th></tr></thead>
+              <tbody id="manualItemsBody"></tbody>
+            </table>
+          </div>
+          <div class="import-hint mt-2"><strong>Produto nao cadastrado?</strong><span>Preencha a descricao e continue como produto pendente, ou use Cadastro Rapido para criar antes de finalizar.</span></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-target="#quickProductModal" data-bs-toggle="modal">Cadastrar Produto</button>
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary">Confirmar recebimento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="quickProductModal" tabindex="-1">
+  <div class="modal-dialog modal-md modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('cadastrar_produto_rapido_recebimento') }}">
+        <div class="modal-header"><h5 class="modal-title">Cadastro Rapido de Produto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12"><label class="form-label">Nome do Produto *</label><input class="form-control" name="descricao" required></div>
+            <div class="col-md-6"><label class="form-label">Codigo Interno *</label><input class="form-control" name="codigo" required></div>
+            <div class="col-md-6"><label class="form-label">Codigo do Fornecedor</label><input class="form-control" name="codigo_fornecedor"></div>
+            <div class="col-md-6"><label class="form-label">Unidade *</label><select class="form-select" name="unidade" required>{% for unidade in unidades %}<option value="{{ unidade.codigo }}">{{ unidade.nome }}</option>{% endfor %}</select></div>
+            <div class="col-md-6"><label class="form-label">Qtd. por unidade de compra</label><input class="form-control" type="number" min="0.0001" step="0.0001" name="quantidade_por_unidade_compra" value="1"></div>
+            <div class="col-md-6"><label class="form-label">Unidade base</label><input class="form-control" name="unidade_base" placeholder="Ex.: Pecas, Chapas, KG"></div>
+            <div class="col-md-6"><label class="form-label">Categoria *</label><select class="form-select" name="categoria" required>{% for categoria in categorias %}<option>{{ categoria.nome }}</option>{% endfor %}</select></div>
+            <div class="col-12"><label class="form-label">Fornecedor *</label><select class="form-select" name="fornecedor_id" required>{% for f in fornecedores %}<option value="{{ f.id }}">{{ f.nome }}</option>{% endfor %}</select></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-target="#manualReceiptModal" data-bs-toggle="modal">Voltar</button><button class="btn btn-primary">Salvar produto</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="panel-card">
+  <div class="panel-header">
+    <div>
+      <h2>Agenda de recebimentos</h2>
+      <p>Atrasos são identificados automaticamente</p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead><tr><th>Ordem</th><th>Data prevista</th><th>Data real</th><th>Dias de atraso</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for r in recebimentos %}
+        <tr>
+          <td><strong>{{ r.numero_oc }}</strong></td>
+          <td>{{ r.data_prevista.strftime('%d/%m/%Y') }}</td>
+          <td>{{ r.data_real.strftime('%d/%m/%Y') if r.data_real else '-' }}</td>
+          <td><span class="{{ 'text-danger fw-bold' if r.dias_atraso }}">{{ r.dias_atraso }} dia(s)</span></td>
+          <td><span class="status-badge status-{{ r.status_exibicao|replace(' ','-') }}">{{ r.status_exibicao }}</span></td>
+          <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#receiveModal" onclick='fillForm("receiveForm", {{ r|tojson }})'>Atualizar</button></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty-state">Nenhum recebimento agendado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="receiveModal">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="receiveForm">
+        <div class="modal-header">
+          <h5>Atualizar recebimento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="id">
+          <div class="mb-3">
+            <label class="form-label">Data real de chegada</label>
+            <input class="form-control" type="date" name="data_real">
+          </div>
+          <div>
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+              <option>aguardando</option>
+              <option>entregue parcial</option>
+              <option>entregue completo</option>
+              <option>atrasado</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary">Salvar recebimento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+const manualProducts = {{ manual_products|tojson }};
+const manualProductByCode = Object.fromEntries(manualProducts.map(product => [String(product.codigo || '').toLowerCase(), product]));
+
+function manualRowTemplate(item = {}) {
+  return `<tr>
+    <td><input class="form-control form-control-sm manual-code" name="codigo_interno[]" value="${item.codigo || ''}" list="manualProductCodes"><input type="hidden" name="produto_id[]" value="${item.produto_id || ''}"></td>
+    <td><input class="form-control form-control-sm" name="codigo_fornecedor[]" value="${item.codigo_fornecedor || ''}"></td>
+    <td><input class="form-control form-control-sm" name="descricao[]" value="${item.descricao || ''}" required></td>
+    <td><input class="form-control form-control-sm manual-calc" type="number" min="0.0001" step="0.0001" name="quantidade[]" value="${item.quantidade || 1}" required></td>
+    <td><select class="form-select form-select-sm" name="unidade[]">{% for unidade in unidades %}<option value="{{ unidade.codigo }}">{{ unidade.codigo }}</option>{% endfor %}</select></td>
+    <td><input class="form-control form-control-sm manual-calc" type="number" min="0" step="0.01" name="valor_unitario[]" value="${item.valor_unitario || 0}" required></td>
+    <td><input class="form-control form-control-sm manual-calc" type="number" min="0" step="0.01" name="desconto[]" value="${item.desconto || 0}"></td>
+    <td><strong class="manual-line-total">R$ 0,00</strong></td>
+    <td><button type="button" class="btn btn-icon text-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+  </tr>`;
+}
+
+function updateManualLine(row) {
+  const quantity = Number(row.querySelector('[name="quantidade[]"]').value || 0);
+  const unit = Number(row.querySelector('[name="valor_unitario[]"]').value || 0);
+  const discount = Number(row.querySelector('[name="desconto[]"]').value || 0);
+  row.querySelector('.manual-line-total').textContent = money(Math.max(quantity * unit - discount, 0));
+}
+
+function addManualItemRow(item = {}) {
+  const body = document.getElementById('manualItemsBody');
+  body.insertAdjacentHTML('beforeend', manualRowTemplate(item));
+  const row = body.lastElementChild;
+  if (item.unidade) row.querySelector('[name="unidade[]"]').value = item.unidade;
+  updateManualLine(row);
+}
+
+document.addEventListener('input', event => {
+  if (event.target.matches('.manual-calc')) updateManualLine(event.target.closest('tr'));
+  if (event.target.matches('.manual-code')) {
+    const product = manualProductByCode[String(event.target.value || '').toLowerCase()];
+    const row = event.target.closest('tr');
+    if (product) {
+      row.querySelector('[name="produto_id[]"]').value = product.id;
+      row.querySelector('[name="descricao[]"]').value = product.descricao;
+      row.querySelector('[name="unidade[]"]').value = product.unidade || 'UN';
+    } else {
+      row.querySelector('[name="produto_id[]"]').value = '';
+    }
+  }
+});
+
+document.getElementById('manualOrdem')?.addEventListener('change', async event => {
+  if (!event.target.value) return;
+  const response = await fetch(`/api/ordens/${event.target.value}/itens`);
+  const data = await response.json();
+  if (data.fornecedor_id) document.getElementById('manualFornecedor').value = data.fornecedor_id;
+  const body = document.getElementById('manualItemsBody');
+  body.innerHTML = '';
+  data.items.forEach(item => addManualItemRow({produto_id:item.produto_id,codigo:item.codigo,descricao:item.descricao,unidade:item.unidade,quantidade:item.quantidade,valor_unitario:item.valor_unitario}));
+});
+
+document.getElementById('manualReceiptModal')?.addEventListener('shown.bs.modal', () => {
+  if (!document.getElementById('manualItemsBody').children.length) addManualItemRow();
+});
+</script>
+<datalist id="manualProductCodes">{% for produto in manual_products %}<option value="{{ produto.codigo }}">{{ produto.descricao }}</option>{% endfor %}</datalist>
+{% endblock %}
