@@ -1,0 +1,7 @@
+sistema-compras/.env
+sistema-compras/__pycache__/
+sistema-compras/*.log
+sistema-compras/server_*.log
+sistema-compras/serve_*.log
+sistema-compras/*.db
+sistema-compras/*.sqlite3
