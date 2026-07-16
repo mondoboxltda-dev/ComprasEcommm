@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ComprasPro{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="{{ url_for('dashboard') }}"><span class="brand-icon"><i class="bi bi-bag-check-fill"></i></span><span>ComprasPro</span></a>
+      <nav class="nav flex-column gap-1 mt-4">
+        {% set endpoint = request.endpoint %}
+        {% set cadastro_modulo = request.args.get('modulo') %}
+        {% if can_access('dashboard') %}<a class="nav-link {{ 'active' if endpoint == 'dashboard' }}" href="{{ url_for('dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a>{% endif %}
+        {% if can_access('cadastros') %}<a class="nav-link {{ 'active' if endpoint in ['cadastros','excluir_cadastro'] and cadastro_modulo != 'orcamentos' }}" href="{{ url_for('cadastros') }}"><i class="bi bi-collection"></i> Cadastros</a>{% endif %}
+        {% if can_access('fornecedores') %}<a class="nav-link {{ 'active' if endpoint == 'fornecedores' }}" href="{{ url_for('fornecedores') }}"><i class="bi bi-buildings"></i> Fornecedores</a>{% endif %}
+        {% if can_access('produtos') %}<a class="nav-link {{ 'active' if endpoint == 'produtos' }}" href="{{ url_for('produtos') }}"><i class="bi bi-box-seam"></i> Produtos</a>{% endif %}
+        {% if can_access('historico_compras') %}<a class="nav-link {{ 'active' if endpoint == 'historico_compras' }}" href="{{ url_for('historico_compras') }}"><i class="bi bi-graph-up"></i> Histórico de Compras</a>{% endif %}
+        {% if can_access('ordens') %}<a class="nav-link {{ 'active' if endpoint in ['ordens','nova_ordem'] }}" href="{{ url_for('ordens') }}"><i class="bi bi-receipt"></i> Ordens de compra</a>{% endif %}
+        {% if can_access('autorizacoes') %}<a class="nav-link {{ 'active' if endpoint == 'autorizacoes' }}" href="{{ url_for('autorizacoes') }}"><i class="bi bi-shield-check"></i> Autorizações</a>{% endif %}
+        {% if can_access('recebimentos') %}<a class="nav-link {{ 'active' if endpoint == 'recebimentos' }}" href="{{ url_for('recebimentos') }}"><i class="bi bi-truck"></i> Recebimentos</a>{% endif %}
+        {% if can_access('orcamentos') %}<a class="nav-link {{ 'active' if cadastro_modulo == 'orcamentos' or endpoint in ['orcamentos','salvar_orcamento_mensal','importar_orcamentos_mensais','baixar_modelo_orcamentos','excluir_orcamento_mensal'] }}" href="{{ url_for('cadastros', modulo='orcamentos') }}"><i class="bi bi-pie-chart"></i> Orçamentos</a>{% endif %}
+        {% if current_user and current_user.tipo_acesso == 'administrador' %}<a class="nav-link {{ 'active' if endpoint == 'usuarios' }}" href="{{ url_for('usuarios') }}"><i class="bi bi-people"></i> Usuários</a>{% endif %}
+      </nav>
+      <div class="sidebar-footer"><div class="avatar">CP</div><div><strong>{{ current_user.nome if current_user else 'Equipe de Compras' }}</strong><small><a class="logout-link" href="{{ url_for('logout') }}">Sair do sistema</a></small></div></div>
+    </aside>
+    <main class="main-content page-{{ request.endpoint|replace('_','-') if request.endpoint else 'default' }}">
+      <header class="topbar">
+        <button class="btn menu-button" id="sidebarToggle"><i class="bi bi-list"></i></button>
+        <div><h1>{% block page_title %}Dashboard{% endblock %}</h1><p>{% block page_subtitle %}Visão geral da operação{% endblock %}</p></div>
+        <div class="topbar-actions">
+        {% set export_tabs = ['dashboard','cadastros','fornecedores','produtos','historico_compras','ordens','autorizacoes','recebimentos','usuarios'] %}
+          <div class="topbar-date"><i class="bi bi-calendar3"></i> {{ hoje.strftime('%d/%m/%Y') }}</div>
+          {% if endpoint in export_tabs %}
+          <a class="btn btn-primary topbar-export" href="{{ url_for('exportar_tela', tela=endpoint) }}{% if request.query_string %}?{{ request.query_string.decode('utf-8') }}{% endif %}"><i class="bi bi-file-earmark-excel"></i> <span>Exportar dados XLSX</span></a>
+          {% endif %}
+        </div>
+      </header>
+      <section class="content-area">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for category, message in messages %}<div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endfor %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </section>
+      <footer>ComprasPro &copy; {{ ano }} · Gestão inteligente de suprimentos</footer>
+    </main>
+  </div>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
