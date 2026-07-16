@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% block title %}Autorizacoes | ComprasPro{% endblock %}
+{% block page_title %}Autorizacoes{% endblock %}
+{% block page_subtitle %}Analise rapida das ordens de compra{% endblock %}
+{% block content %}
+<div class="panel-card">
+  <div class="panel-header">
+    <div>
+      <h2>Fila de autorizacao</h2>
+      <p>{{ autorizacoes|length }} ordem(ns)</p>
+    </div>
+  </div>
+  <form class="order-filters mb-3" method="get">
+    <input class="form-control" name="numero" value="{{ filtros.numero }}" placeholder="Numero do pedido">
+    <input class="form-control" type="date" name="data_inicio" value="{{ filtros.data_inicio }}" title="Data inicial">
+    <input class="form-control" type="date" name="data_fim" value="{{ filtros.data_fim }}" title="Data final">
+    <div class="order-filter-actions">
+      <a class="btn btn-light" href="{{ url_for('autorizacoes') }}">Limpar</a>
+      <button class="btn btn-primary"><i class="bi bi-funnel"></i> Filtrar</button>
+    </div>
+  </form>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead>
+        <tr>
+          <th>Ordem</th>
+          <th>Fornecedor</th>
+          <th>Entrega</th>
+          <th>Valor total</th>
+          <th>Autorizado por</th>
+          <th>Aprovacao</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in autorizacoes %}
+        <tr>
+          <td><strong>{{ a.numero_oc }}</strong></td>
+          <td>{{ a.fornecedor }}</td>
+          <td>{{ a.data_entrega.strftime('%d/%m/%Y') if a.data_entrega else '-' }}</td>
+          <td>{{ a.valor_total|moeda }}</td>
+          <td>{{ a.autorizado_por or '-' }}</td>
+          <td>{{ a.decidido_em.strftime('%d/%m/%Y %H:%M') if a.decidido_em else (a.data_aprovacao.strftime('%d/%m/%Y') if a.data_aprovacao else '-') }}</td>
+          <td><span class="status-badge status-{{ a.status }}">{{ a.status }}</span></td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#authModal" onclick='openAuthorizationModal({{ a.resumo_json|tojson }})'>Analisar</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty-state">Nenhuma autorizacao pendente.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="authModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <form method="post" id="authForm" onsubmit="return validateAuthorizationDecision(event)">
+        <div class="modal-header">
+          <div>
+            <h5>Analisar ordem de compra</h5>
+            <small class="text-muted" id="authOrderNumber">-</small>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="id" id="authId">
+          <input type="hidden" name="status" id="authStatus">
+          <div class="auth-summary-grid mb-3">
+            <div><span>Valor total</span><strong id="authTotal">-</strong></div>
+            <div><span>Fornecedor</span><strong id="authSupplier">-</strong></div>
+            <div><span>Data de entrega</span><strong id="authDelivery">-</strong></div>
+          </div>
+
+          <div class="mb-3">
+            <h6 class="auth-section-title">Produtos</h6>
+            <div class="table-responsive">
+              <table class="table modern-table auth-items-table">
+                <thead><tr><th>Produto</th><th>Quantidade</th><th>Valor unitario</th><th>Valor total</th></tr></thead>
+                <tbody id="authProducts"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <h6 class="auth-section-title">Analise do orcamento</h6>
+            <div id="authBudget"></div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label class="form-label">Responsavel</label>
+              <input class="form-control" name="autorizado_por" id="authUser" value="Equipe de Compras">
+            </div>
+            <div class="col-md-7">
+              <label class="form-label">Motivo da reprovacao</label>
+              <textarea class="form-control" rows="2" name="observacao" id="authReason" placeholder="Obrigatorio ao reprovar"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fechar</button>
+          <button type="submit" class="btn btn-outline-danger" onclick="setAuthorizationStatus('reprovada')">Reprovar</button>
+          <button type="submit" class="btn btn-primary" onclick="setAuthorizationStatus('aprovada')">Aprovar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedAuthorizationStatus = '';
+function authMoney(value) {
+  return new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'}).format(Number(value || 0));
+}
+function authNumber(value) {
+  return new Intl.NumberFormat('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:4}).format(Number(value || 0));
+}
+function openAuthorizationModal(data) {
+  selectedAuthorizationStatus = '';
+  document.getElementById('authId').value = data.id;
+  document.getElementById('authStatus').value = '';
+  document.getElementById('authOrderNumber').textContent = data.numero_oc || '-';
+  document.getElementById('authTotal').textContent = authMoney(data.valor_total);
+  document.getElementById('authSupplier').textContent = data.fornecedor || '-';
+  document.getElementById('authDelivery').textContent = data.data_entrega || '-';
+  document.getElementById('authUser').value = 'Equipe de Compras';
+  document.getElementById('authReason').value = '';
+
+  const products = data.produtos || [];
+  document.getElementById('authProducts').innerHTML = products.length ? products.map(item => `
+    <tr>
+      <td><strong>${escapeHtml(item.produto || '-')}</strong></td>
+      <td>${authNumber(item.quantidade)} ${escapeHtml(item.unidade || '')}</td>
+      <td>${authMoney(item.valor_unitario)}</td>
+      <td>${authMoney(item.valor_total)}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="4" class="empty-state">Nenhum produto encontrado.</td></tr>';
+
+  const budgets = data.orcamentos || [];
+  document.getElementById('authBudget').innerHTML = budgets.length ? budgets.map(row => {
+    const alert = !row.tem_orcamento
+      ? '<div class="alert alert-secondary mb-0">Nao existe orcamento cadastrado para esta categoria no mes atual.</div>'
+      : row.estouro > 0
+        ? `<div class="alert alert-danger mb-0">Esta compra ira estourar o orcamento em ${authMoney(row.estouro)}</div>`
+        : '<div class="alert alert-success mb-0">Compra dentro do orcamento disponivel</div>';
+    return `<div class="auth-budget-box">
+      <div class="auth-budget-lines">
+        <div><span>Categoria da compra</span><strong>${escapeHtml(row.categoria || '-')}</strong></div>
+        <div><span>Orcamento mensal</span><strong>${row.tem_orcamento ? authMoney(row.orcamento) : '-'}</strong></div>
+        <div><span>Valor ja utilizado</span><strong>${authMoney(row.utilizado)}</strong></div>
+        <div><span>Valor desta compra</span><strong>${authMoney(row.valor_compra)}</strong></div>
+        <div><span>Saldo apos a compra</span><strong>${row.tem_orcamento ? authMoney(row.saldo_apos) : '-'}</strong></div>
+      </div>
+      ${alert}
+    </div>`;
+  }).join('') : '<div class="alert alert-secondary mb-0">Nao foi encontrada categoria para analisar o orcamento.</div>';
+}
+function setAuthorizationStatus(status) {
+  selectedAuthorizationStatus = status;
+  document.getElementById('authStatus').value = status;
+}
+function validateAuthorizationDecision(event) {
+  const status = document.getElementById('authStatus').value || selectedAuthorizationStatus;
+  if (!status) {
+    event.preventDefault();
+    return false;
+  }
+  if (status === 'reprovada' && !document.getElementById('authReason').value.trim()) {
+    event.preventDefault();
+    alert('Informe o motivo da reprovacao.');
+    document.getElementById('authReason').focus();
+    return false;
+  }
+  return true;
+}
+</script>
+{% endblock %}

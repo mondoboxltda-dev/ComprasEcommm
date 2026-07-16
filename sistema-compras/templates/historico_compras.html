@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}Historico de Compras | ComprasPro{% endblock %}
+{% block page_title %}Historico de Compras{% endblock %}
+{% block page_subtitle %}Visao consolidada por codigo interno do produto{% endblock %}
+{% block content %}
+<div class="history-page">
+<div class="panel-card history-main-panel">
+  <div class="panel-header">
+    <div>
+      <h2>Historico consolidado por codigo</h2>
+      <p>{{ grouped_rows|length }} codigo(s) encontrado(s)</p>
+    </div>
+  </div>
+<div class="history-metrics-grid mb-3">
+  <div class="metric-card history-metric-card"><div class="metric-icon bg-primary-subtle text-primary"><i class="bi bi-cash-stack"></i></div><div class="history-metric-content"><span>Total comprado</span><strong>{{ summary.total_comprado|moeda }}</strong></div></div>
+  <div class="metric-card history-metric-card"><div class="metric-icon bg-success-subtle text-success"><i class="bi bi-boxes"></i></div><div class="history-metric-content"><span>Quantidade total</span><strong>{{ summary.quantidade_total or 0 }}</strong></div></div>
+  <div class="metric-card history-metric-card"><div class="metric-icon bg-warning-subtle text-warning"><i class="bi bi-percent"></i></div><div class="history-metric-content"><span>Preco medio geral</span><strong>{{ summary.preco_medio_geral|moeda if summary.preco_medio_geral is not none else '-' }}</strong><small>Unidade de compra</small></div></div>
+  <div class="metric-card history-metric-card"><div class="metric-icon bg-danger-subtle text-danger"><i class="bi bi-graph-up-arrow"></i></div><div class="history-metric-content"><span>Maior aumento</span><strong>{{ product_increase.codigo if product_increase else '-' }}</strong><small>{% if product_increase %}+{{ '%.1f'|format(product_increase.variacao_percentual) }}%{% else %}Sem alerta{% endif %}</small></div></div>
+  <div class="metric-card history-metric-card"><div class="metric-icon bg-info-subtle text-info"><i class="bi bi-building-check"></i></div><div class="history-metric-content"><span>Fornecedor mais usado</span><strong class="metric-fit-text" title="{{ supplier_most.fornecedor if supplier_most else '-' }}">{{ supplier_most.fornecedor if supplier_most else '-' }}</strong><small>{{ supplier_most.total if supplier_most else 0 }} compra(s)</small></div></div>
+</div>
+
+  <form class="history-filters mb-3" id="historyFilters" method="get">
+    <div class="history-filter-field">
+      <label for="history-codigo">Codigo interno</label>
+      <select id="history-codigo" class="form-select" name="codigo" data-combobox data-placeholder="Todos os codigos"><option value="">Todos os codigos</option>{% for option in filter_options.codigos %}<option value="{{ option.valor }}" {{ 'selected' if filtros.codigo == option.valor }}>{{ option.valor }}</option>{% endfor %}</select>
+    </div>
+    <div class="history-filter-field">
+      <label for="history-produto">Produto</label>
+      <select id="history-produto" class="form-select" name="produto" data-combobox data-placeholder="Todos os produtos"><option value="">Todos os produtos</option>{% for option in filter_options.produtos %}<option value="{{ option.valor }}" {{ 'selected' if filtros.produto == option.valor }}>{{ option.valor }}</option>{% endfor %}</select>
+    </div>
+    <div class="history-filter-field">
+      <label for="history-fornecedor">Fornecedor</label>
+      <select id="history-fornecedor" class="form-select" name="fornecedor" data-combobox data-placeholder="Todos os fornecedores"><option value="">Todos os fornecedores</option>{% for option in filter_options.fornecedores %}<option value="{{ option.valor }}" {{ 'selected' if filtros.fornecedor == option.valor }}>{{ option.valor }}</option>{% endfor %}</select>
+    </div>
+    <div class="history-filter-field">
+      <label for="history-categoria">Categoria</label>
+      <select id="history-categoria" class="form-select" name="categoria" data-combobox data-placeholder="Todas as categorias"><option value="">Todas as categorias</option>{% for c in categorias %}<option value="{{ c.nome }}" {{ 'selected' if filtros.categoria == c.nome }}>{{ c.nome }}</option>{% endfor %}</select>
+    </div>
+    <div class="history-filter-field">
+      <label for="history-nf">NF / documento</label>
+      <select id="history-nf" class="form-select" name="nf" data-combobox data-placeholder="Todos os documentos"><option value="">Todos os documentos</option>{% for option in filter_options.documentos %}<option value="{{ option.valor }}" {{ 'selected' if filtros.nf == option.valor }}>{{ option.valor }}</option>{% endfor %}</select>
+    </div>
+    <div class="history-filter-field">
+      <label for="history-data-inicio">Data inicial</label>
+      <input id="history-data-inicio" class="form-control" type="date" name="data_inicio" value="{{ filtros.data_inicio }}">
+    </div>
+    <div class="history-filter-field">
+      <label for="history-data-fim">Data final</label>
+      <input id="history-data-fim" class="form-control" type="date" name="data_fim" value="{{ filtros.data_fim }}">
+    </div>
+    <div class="history-filter-field">
+      <label for="history-origem">Origem</label>
+      <select id="history-origem" class="form-select" name="origem" data-combobox data-placeholder="Todas as origens"><option value="">Todas as origens</option>{% for origem in filter_options.origens %}<option value="{{ origem }}" {{ 'selected' if filtros.origem == origem }}>{{ origem }}</option>{% endfor %}</select>
+    </div>
+    <div class="history-filter-field">
+      <label for="history-status">Status</label>
+      <select id="history-status" class="form-select" name="status" data-combobox data-placeholder="Todos os status"><option value="">Todos os status</option>{% for status in filter_options.status %}<option value="{{ status }}" {{ 'selected' if filtros.status == status }}>{{ status }}</option>{% endfor %}</select>
+    </div>
+    <div class="history-filter-actions">
+      <a class="btn btn-light" href="{{ url_for('historico_compras') }}">Limpar</a>
+      <button class="btn btn-primary"><i class="bi bi-funnel"></i> Filtrar</button>
+    </div>
+  </form>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead>
+        <tr>
+          <th>Codigo interno</th>
+          <th>Produto</th>
+          <th>Categoria</th>
+          <th>Qtd. compra</th>
+          <th>Qtd. base</th>
+          <th>Preco medio compra</th>
+          <th>Preco medio base</th>
+          <th>Ultimo preco compra</th>
+          <th>Ultimo preco base</th>
+          <th>Ultima compra</th>
+          <th>Ultimo fornecedor</th>
+          <th>Valor total</th>
+          <th>Entradas</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in grouped_rows %}
+        <tr>
+          <td><strong>{{ row.codigo }}</strong></td>
+          <td>{{ row.produto }}</td>
+          <td>{{ row.categoria }}</td>
+          <td>{% for qty in row.quantidades_compra_lista %}{{ qty.quantidade }} {{ qty.unidade }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+          <td>{{ row.quantidade_total_base }} {{ row.unidade_base }}</td>
+          <td>{{ row.preco_medio_historico|moeda }}</td>
+          <td>{{ row.preco_medio_base_historico|moeda }}</td>
+          <td>
+            {{ row.ultimo_preco|moeda }}
+            {% if row.variacao_percentual > 0 %}
+            <small class="cost-alert">+{{ '%.1f'|format(row.variacao_percentual) }}% acima da media</small>
+            {% elif row.variacao_percentual < 0 %}
+            <small class="cost-ok">{{ '%.1f'|format(row.variacao_percentual) }}% abaixo da media</small>
+            {% endif %}
+          </td>
+          <td>{{ row.ultimo_preco_base|moeda }}</td>
+          <td>{{ row.ultima_compra.strftime('%d/%m/%Y') if row.ultima_compra else '-' }}</td>
+          <td>{{ row.ultimo_fornecedor }}</td>
+          <td>{{ row.valor_total_comprado|moeda }}</td>
+          <td>{{ row.entradas_count }}</td>
+          <td class="text-end"><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#entriesModal{{ loop.index }}">Ver entradas</button></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="14" class="empty-state">Nenhum historico de compras encontrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% for row in grouped_rows %}
+<div class="modal fade" id="entriesModal{{ loop.index }}" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div><h5 class="modal-title">{{ row.codigo }} - Entradas</h5><small class="text-muted">{{ row.produto }}</small></div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="panel-card mb-3">
+          <div class="panel-header"><div><h2>Resumo por fornecedor</h2><p>Comparativo historico do codigo {{ row.codigo }}</p></div></div>
+          <div class="table-responsive">
+            <table class="table modern-table">
+              <thead><tr><th>Fornecedor</th><th>Quantidade comprada</th><th>Quantidade base</th><th>Preco medio compra</th><th>Preco medio base</th><th>Ultimo preco compra</th><th>Ultimo preco base</th><th>Valor total</th><th>Compras</th></tr></thead>
+              <tbody>
+                {% for supplier in row.supplier_summary %}
+                <tr><td><strong>{{ supplier.fornecedor }}</strong></td><td>{% for qty in supplier.quantidades_compra_lista %}{{ qty.quantidade }} {{ qty.unidade }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td><td>{{ supplier.quantidade_total_base }} {{ row.unidade_base }}</td><td>{{ supplier.preco_medio|moeda }}</td><td>{{ supplier.preco_medio_base|moeda }}</td><td>{{ supplier.ultimo_preco|moeda }}</td><td>{{ supplier.ultimo_preco_base|moeda }}</td><td>{{ supplier.valor_total_comprado|moeda }}</td><td>{{ supplier.entradas_count }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table modern-table">
+            <thead><tr><th>Data</th><th>Codigo</th><th>Produto</th><th>Categoria</th><th>Fornecedor</th><th>NF</th><th>Qtd. compra</th><th>Qtd. por unidade</th><th>Qtd. base</th><th>Valor unidade compra</th><th>Valor base</th><th>Valor total</th><th>Origem</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for entry in row.entries %}
+              <tr>
+                <td>{{ entry.data_entrada.strftime('%d/%m/%Y') }}</td>
+                <td><strong>{{ entry.codigo }}</strong></td>
+                <td>{{ entry.produto }}</td>
+                <td>{{ entry.categoria }}</td>
+                <td>{{ entry.fornecedor }}</td>
+                <td>{{ entry.documento or '-' }}</td>
+                <td>{{ entry.quantidade }} {{ entry.unidade_compra or entry.unidade }}</td>
+                <td>{{ entry.quantidade_por_unidade_compra }} {{ entry.unidade_base or entry.unidade }}</td>
+                <td>{{ entry.quantidade_total_base }} {{ entry.unidade_base or entry.unidade }}</td>
+                <td>{{ entry.valor_unitario|moeda }}</td>
+                <td>{{ entry.valor_unitario_base|moeda }}</td>
+                <td>{{ entry.valor_total|moeda }}</td>
+                <td><span class="status-badge status-{{ 'em-compra' if entry.origem == 'Manual' else 'ativo' }}">{{ entry.origem }}</span></td>
+                <td><span class="status-badge status-{{ (entry.status_recebimento or 'Recebido')|lower|replace(' ','-') }}">{{ entry.status_recebimento or 'Recebido' }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Fechar</button></div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% endblock %}

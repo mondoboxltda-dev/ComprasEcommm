@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Historico de alteracoes | ComprasPro{% endblock %}
+{% block page_title %}Historico de alteracoes{% endblock %}
+{% block page_subtitle %}Rastreabilidade das acoes realizadas no sistema{% endblock %}
+{% block content %}
+<div class="panel-card">
+  <div class="panel-header"><div><h2>Auditoria do sistema</h2><p>{{ registros|length }} registro(s) encontrado(s)</p></div></div>
+  <form class="history-filters mb-3" method="get">
+    <select class="form-select" name="modulo"><option value="">Todas as abas</option>{% for module, label in modules %}{% if can(module, 'visualizar_historico') %}<option value="{{ module }}" {{ 'selected' if filtros.modulo == module }}>{{ label }}</option>{% endif %}{% endfor %}</select>
+    <select class="form-select" name="acao"><option value="">Todas as acoes</option>{% for action, label in actions %}<option value="{{ action }}" {{ 'selected' if filtros.acao == action }}>{{ label }}</option>{% endfor %}</select>
+    <input class="form-control" name="usuario" value="{{ filtros.usuario }}" placeholder="Nome do usuario">
+    <input class="form-control" type="date" name="data_inicio" value="{{ filtros.data_inicio }}" title="Data inicial">
+    <input class="form-control" type="date" name="data_fim" value="{{ filtros.data_fim }}" title="Data final">
+    <div class="history-filter-actions"><a class="btn btn-light" href="{{ url_for('auditoria') }}">Limpar</a><button class="btn btn-primary"><i class="bi bi-funnel"></i> Filtrar</button></div>
+  </form>
+  <div class="table-responsive"><table class="table modern-table">
+    <thead><tr><th>Data e hora</th><th>Usuario</th><th>Aba</th><th>Acao</th><th>Registro afetado</th><th>Informacao anterior</th><th>Informacao nova</th></tr></thead>
+    <tbody>{% for item in registros %}<tr><td>{{ item.criado_em.strftime('%d/%m/%Y %H:%M:%S') }}</td><td><strong>{{ item.usuario_nome }}</strong></td><td>{{ item.modulo }}</td><td><span class="status-badge">{{ item.acao }}</span></td><td>{{ item.registro_tipo or '-' }}{% if item.registro_id %} #{{ item.registro_id }}{% endif %}</td><td>{{ item.informacao_anterior or '-' }}</td><td>{{ item.informacao_nova or '-' }}</td></tr>{% else %}<tr><td colspan="7" class="empty-state">Nenhuma alteracao encontrada.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}
