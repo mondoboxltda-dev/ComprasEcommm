@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block title %}Produtos | ComprasPro{% endblock %}
+{% block page_title %}Produtos{% endblock %}
+{% block page_subtitle %}Cadastro focado em unidade, fornecedor e estoque de segurança{% endblock %}
+{% block content %}
+<div class="panel-card">
+  <div class="panel-header">
+    <div>
+      <h2>Catálogo de produtos</h2>
+      <p>{{ produtos|length }} registro(s) encontrado(s)</p>
+    </div>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#formModal" onclick="clearForm('produtoForm')">
+      <i class="bi bi-plus-lg"></i> Novo produto
+    </button>
+  </div>
+  <div class="table-responsive">
+    <table class="table modern-table">
+      <thead>
+        <tr>
+          <th>Código / Produto</th>
+          <th>Categoria</th>
+          <th>Unidade</th>
+          <th>Fornecedor</th>
+          <th>Estoque segurança</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in produtos %}
+        <tr>
+          <td><strong>{{ p.codigo }}</strong><small>{{ p.descricao }}</small></td>
+          <td>{{ p.categoria }}</td>
+          <td>{{ p.unidade_nome or p.unidade }}</td>
+          <td>{{ p.fornecedor_nome or '-' }}</td>
+          <td>{{ p.estoque_seguranca }} {{ p.unidade }}</td>
+          <td><span class="status-badge status-{{ p.status }}">{{ p.status }}</span></td>
+          <td class="text-end">
+            <button class="btn btn-icon" data-bs-toggle="modal" data-bs-target="#formModal" onclick='fillForm("produtoForm", {{ p|tojson }})'>
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form class="d-inline" method="post" action="{{ url_for('excluir_produto', item_id=p.id) }}" onsubmit="return confirmDelete()">
+              <button class="btn btn-icon text-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty-state">Nenhum produto cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="formModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="produtoForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Produto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="id">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Código *</label>
+              <input class="form-control" name="codigo" required>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Descrição *</label>
+              <input class="form-control" name="descricao" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Categoria *</label>
+              <select class="form-select" name="categoria" required>
+                <option value="">Selecione</option>
+                {% for categoria in categorias %}
+                <option value="{{ categoria.categoria }}">{{ categoria.categoria }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Unidade de Medida *</label>
+              <select class="form-select" name="unidade" required>
+                <option value="">Selecione</option>
+                {% for unidade in unidades %}
+                <option value="{{ unidade.codigo }}">{{ unidade.nome }}{% if unidade.codigo in ['UN','CX','PCT','KG','G','L','ML','M'] %} ({{ unidade.codigo }}){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Fornecedor *</label>
+              {% if fornecedores %}
+              <input class="form-control select-search mb-2" type="search" placeholder="Pesquisar fornecedor" data-filter-select="fornecedorSelect">
+              <select class="form-select" id="fornecedorSelect" name="fornecedor_id" required>
+                <option value="">Selecione</option>
+                {% for fornecedor in fornecedores %}
+                <option value="{{ fornecedor.id }}">{{ fornecedor.nome }}</option>
+                {% endfor %}
+              </select>
+              {% else %}
+              <div class="empty-inline">Nenhum fornecedor cadastrado.</div>
+              <select class="form-select d-none" name="fornecedor_id" required>
+                <option value="">Nenhum fornecedor cadastrado.</option>
+              </select>
+              {% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Estoque de Segurança *</label>
+              <input class="form-control" type="number" min="0.01" step="0.01" name="estoque_seguranca" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Status *</label>
+              <select class="form-select" name="status" required>
+                <option value="ativo">ativo</option>
+                <option value="inativo">inativo</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary">Salvar produto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
